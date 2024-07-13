@@ -11,7 +11,7 @@ fn main() {
     
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
+            Ok(stream) => {
                 println!("accepted new connection");
                 handle_connection(stream);
             }
@@ -30,8 +30,15 @@ fn handle_connection(mut stream: TcpStream) {
         .take_while(|line| !line.is_empty())
         .collect();
 
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+    let request_line: Vec<&str> = http_request[0].split(" ").collect();
+    let response = match request_line[1] {
+        "/" => "200 OK",
+        _ => "404 Not Found"
+    };
 
-    println!("Request: {http_request:#?}");
-    stream.write(response.as_bytes()).unwrap();
+    stream.write_all(format!("HTTP/1.1 {}\r\n\r\n", response).as_bytes()).unwrap();
+
+    
+
+
 }
