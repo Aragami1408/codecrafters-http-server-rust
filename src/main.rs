@@ -1,4 +1,5 @@
 use std::{
+    env, fs,
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
 };
@@ -68,6 +69,27 @@ fn handle_connection(mut stream: TcpStream) {
             ));
         } else {
             panic!("Can't find user agent");
+        }
+    } else if path.starts_with("/files/") {
+        let (_, filename) = path.split_at(7);
+
+        let args: Vec<String> = env::args().collect();
+        if (args[1] != "--directory") {
+            panic!("Please specify directory by using --directory option");
+        }
+
+        let mut dir = args[2].clone();
+        let file = fs::read(dir + filename);
+
+        match file {
+            Ok(file_content) => {
+                response = String::from(format!(
+                    "200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
+                    file_content.len(),
+                    String::from_utf8(file_content).expect("file content")
+                ));
+            }
+            Err(_) => response = String::from("404 Not Found"),
         }
     } else {
         response = String::from("404 Not Found");
