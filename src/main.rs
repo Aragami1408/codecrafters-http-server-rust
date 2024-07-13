@@ -31,14 +31,20 @@ fn handle_connection(mut stream: TcpStream) {
         .collect();
 
     let request_line: Vec<&str> = http_request[0].split(" ").collect();
-    let response = match request_line[1] {
-        "/" => "200 OK",
-        _ => "404 Not Found"
-    };
+    let mut response = String::from("");
+
+    let path = request_line[1];
+    if path == "/" {
+        response = String::from("200 OK");
+    }
+    else if path.starts_with("/echo/") {
+        let (_, parameter) = path.split_at(6);
+        response = String::from(format!("200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", 
+            parameter.len(), parameter));
+    }
+    else {
+        response = String::from("404 Not Found");
+    }
 
     stream.write_all(format!("HTTP/1.1 {}\r\n\r\n", response).as_bytes()).unwrap();
-
-    
-
-
 }
