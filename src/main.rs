@@ -1,6 +1,6 @@
 use std::{
-    env, fs,
-    io::{prelude::*, BufReader},
+    env, fs::{self, File},
+    io::{prelude::*},
     net::{TcpListener, TcpStream},
 };
 
@@ -23,7 +23,7 @@ fn main() {
     }
 }
 
-fn get_headers<'a>(headers: &'a [String], header: &'a str) -> Option<&'a str> {
+fn get_headers<'a>(headers: &'a [&str], header: &'a str) -> Option<&'a str> {
     for line in headers {
         let lowercase_line = line.to_lowercase();
         if lowercase_line.starts_with(&header.to_lowercase()) {
@@ -36,20 +36,19 @@ fn get_headers<'a>(headers: &'a [String], header: &'a str) -> Option<&'a str> {
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&mut stream);
-    let http_request: Vec<_> = buf_reader
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
-
-    println!("HTTP Request: {:?}", http_request);
+    let mut buffer = [0; 512];
+    stream.read(&mut buffer).expect("Error writing to buffer");
+    let request = String::from_utf8_lossy(&buffer[..]);
+    let http_request = request.lines().map(|line| line.trim_matches(char::from(0))).collect::<Vec<&str>>();
+    println!("Request: {:?}", http_request);
 
     let request_line: Vec<&str> = http_request[0].split(" ").collect();
 
     let mut response = String::from("");
 
+    let method = request_line[0];
     let path = request_line[1];
+
     if path == "/" {
         response = String::from("200 OK");
     } else if path.starts_with("/echo/") {
@@ -60,7 +59,7 @@ fn handle_connection(mut stream: TcpStream) {
             parameter
         ));
     } else if path.starts_with("/user-agent") {
-        let headers = &http_request[1..http_request.len()];
+        let headers = &http_request[1..http_request.len()-2];
         if let Some(user_agent) = get_headers(headers, "User-Agent") {
             response = String::from(format!(
                 "200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
@@ -74,22 +73,35 @@ fn handle_connection(mut stream: TcpStream) {
         let (_, filename) = path.split_at(7);
 
         let args: Vec<String> = env::args().collect();
-        if (args[1] != "--directory") {
+        if args[1] != "--directory" {
             panic!("Please specify directory by using --directory option");
         }
 
-        let mut dir = args[2].clone();
-        let file = fs::read(dir + filename);
+        let dir = args[2].clone();
 
-        match file {
-            Ok(file_content) => {
-                response = String::from(format!(
+        if method == "POST" {
+            let contents = http_request[http_request.len()-1];
+            println!("Content to write: {}", contents);
+            let file = File::create(dir + filename);
+            match file {
+                Ok(mut file) => {
+                    response = String::from("201 Created");
+                    file.write_all(contents.as_bytes()).err();
+                },
+                Err(_) => panic!("Can't create file"),
+            }
+        } else {
+            let file = fs::read(dir + filename);
+            match file {
+                Ok(file_content) => {
+                    response = String::from(format!(
                     "200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
                     file_content.len(),
                     String::from_utf8(file_content).expect("file content")
                 ));
+                }
+                Err(_) => response = String::from("404 Not Found"),
             }
-            Err(_) => response = String::from("404 Not Found"),
         }
     } else {
         response = String::from("404 Not Found");
