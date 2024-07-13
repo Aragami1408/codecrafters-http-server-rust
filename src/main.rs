@@ -13,7 +13,7 @@ fn main() {
         match stream {
             Ok(stream) => {
                 println!("accepted new connection");
-                handle_connection(stream);
+                std::thread::spawn(|| handle_connection(stream));
             }
             Err(e) => {
                 println!("error: {}", e);
@@ -24,7 +24,8 @@ fn main() {
 
 fn get_headers<'a>(headers: &'a [String], header: &'a str) -> Option<&'a str> {
     for line in headers {
-        if line.starts_with(header) {
+        let lowercase_line = line.to_lowercase();
+        if lowercase_line.starts_with(&header.to_lowercase()) {
             let (_, result) = line.split_at(header.len() + 2);
             return Some(result);
         }
